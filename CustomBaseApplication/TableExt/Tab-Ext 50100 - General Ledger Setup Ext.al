@@ -17,5 +17,13 @@ tableextension 50100 "General Ledger Setup Ext" extends "General Ledger Setup"
             Caption = 'Consumer Secret';
             DataClassification = ToBeClassified;
         }
+        field(50103; "API Integration Type"; Option)
+        {
+            OptionMembers = "C2B","STK PUSH";
+        }
+        field(50104; "CallBack URL"; Text[2000])
+        {
+            DataClassification = ToBeClassified;
+        }
     }
 }

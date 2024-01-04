@@ -14,6 +14,13 @@ codeunit 50100 "Mpesa Integration"
         Base64Convert: Codeunit "Base64 Convert";
         RequestFailError: Label 'Unable to process the request through the API!';
         AccessToken: Text;
+        Password: Text;
+        TransactionType: Text;
+        Timestamp: Text;
+        PartyA: Text;
+        PartyB: Integer;
+        AccountReference: Text;
+        TransactionDesc: Text;
 
     procedure GetSetup()
     begin
@@ -21,15 +28,34 @@ codeunit 50100 "Mpesa Integration"
         GeneralSetup.TestField("Short Code");
         GeneralSetup.TestField("Consumer Key");
         GeneralSetup.TestField("Consumer Secret");
+        GeneralSetup.TestField("API Integration Type");
+        GeneralSetup.TestField("CallBack URL");
     end;
 
     procedure MpesaValues()
     begin
-        BaseURL := 'https://sandbox.safaricom.co.ke/mpesa/c2b/v1/simulate';
         Amount := 1;
-        MSISDN := '254708374149';
-        CommandID := 'CustomerBuyGoodsOnline';
-        BillRefNumber := '';
+        // Check the Integration Type to build populate the values
+        case GeneralSetup."API Integration Type" of
+            GeneralSetup."API Integration Type"::"C2B":
+                begin
+                    MSISDN := '254708374149';
+                    CommandID := 'CustomerBuyGoodsOnline';
+                    BillRefNumber := '';
+                    BaseURL := 'https://sandbox.safaricom.co.ke/mpesa/c2b/v1/simulate';
+                end;
+            GeneralSetup."API Integration Type"::"STK PUSH":
+                begin
+                    BaseURL := 'https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest';
+                    "Password" := 'MTc0Mzc5YmZiMjc5ZjlhYTliZGJjZjE1OGU5N2RkNzFhNDY3Y2QyZTBjODkzMDU5YjEwZjc4ZTZiNzJhZGExZWQyYzkxOTIwMTYwMjE2MTY1NjI3';
+                    "Timestamp" := '20160216165627';
+                    "TransactionType" := 'CustomerPayBillOnline';
+                    "PartyA" := '254708374149';
+                    "PartyB" := 174379;
+                    "AccountReference" := 'Test';
+                    "TransactionDesc" := 'Test';
+                end;
+        end;
     end;
 
     local procedure MpesaAuthorization()
@@ -89,6 +115,8 @@ codeunit 50100 "Mpesa Integration"
         ResponseMssg: HttpResponseMessage;
         RequestHeader: HttpHeaders;
         Content: HttpContent;
+        i: Integer;
+        JsonObject: JsonObject;
     begin
         GetSetup();
         MpesaAuthorization();
@@ -100,11 +128,31 @@ codeunit 50100 "Mpesa Integration"
         Clear(ValueArray);
         Clear(JObject);
 
-        JObject.Add('ShortCode', Format(GeneralSetup."Short Code"));
-        JObject.Add('Amount', Format(Amount));
-        JObject.Add('Msisdn', MSISDN);
-        JObject.Add('CommandID', CommandID);
-        JObject.Add('BillRefNumber', BillRefNumber);
+        // Check the Integration Type to build the Request Body
+        case GeneralSetup."API Integration Type" of
+            GeneralSetup."API Integration Type"::"C2B":
+                begin
+                    JObject.Add('ShortCode', Format(GeneralSetup."Short Code"));
+                    JObject.Add('Amount', Format(Amount));
+                    JObject.Add('Msisdn', MSISDN);
+                    JObject.Add('CommandID', CommandID);
+                    JObject.Add('BillRefNumber', BillRefNumber);
+                end;
+            GeneralSetup."API Integration Type"::"STK PUSH":
+                begin
+                    JObject.Add('BusinessShortCode', Format(GeneralSetup."Short Code"));
+                    JObject.Add('Password', Format(Password));
+                    JObject.Add('Timestamp', Timestamp);
+                    JObject.Add('TransactionType', TransactionType);
+                    JObject.Add('Amount', Amount);
+                    JObject.Add('PartyA', PartyA);
+                    JObject.Add('PartyB', Format(PartyB));
+                    JObject.Add('PhoneNumber', PartyA);
+                    JObject.Add('CallBackURL', GeneralSetup."CallBack URL");
+                    JObject.Add('AccountReference', AccountReference);
+                    JObject.Add('TransactionDesc', TransactionDesc);
+                end;
+        end;
 
         JObject.WriteTo(JcontentTxt);
         Content.WriteFrom(JcontentTxt);
@@ -112,8 +160,6 @@ codeunit 50100 "Mpesa Integration"
         Content.GetHeaders(RequestHeader);
         RequestHeader.Clear();
         RequestHeader.Remove('Content-Type');
-        // RequestHeader.Add('Authorization', 'Bearer ' + AccessToken);
-        // if RequestHeader.Contains('Content-Type') then
         RequestHeader.Add('Content-Type', 'application/json');
         RequestMssg.GetHeaders(RequestHeader);
         RequestHeader.Add('Authorization', 'Bearer ' + AccessToken);
@@ -122,21 +168,18 @@ codeunit 50100 "Mpesa Integration"
         ResponseMssg.Content.ReadAs(ResponseText);
         Message('Request Successful!: %1', ResponseText);
 
-        // //Read Response
-        // JArray.ReadFrom(ResponseText);
-        // Message(Format(ResponseObject));
-        // exit;
-        // Clear(ResponseObject);
+        //Read Response
+        JsonObject.ReadFrom(ResponseText);
 
-        // //Read Array Count
-        // for i := 0 to JArray.Count - 1 do begin
-        //     JArray.Get(i, ResponseToken);
-        //     ResponseObject := ResponseToken.AsObject();
-        // end;
+        Message(JsonAttribute(JsonObject, 'MerchantRequestID'));
+    end;
 
-        // StudentProg."Moodle Id" := JsonAttribute(ResponseObject, 'id');
-        // StudentProg."Moodle Username" := JsonAttribute(ResponseObject, 'username');
-        // StudentProg.Modify();
+    local procedure JsonAttribute(JObject: JsonObject; ObjectMember: Text): Text
+    var
+        ResponseToken: JsonToken;
+    begin
+        if JObject.Get(ObjectMember, ResponseToken) then
+            exit(ResponseToken.AsValue().AsText());
     end;
 
     procedure CollectToken(AccessToken: Text)
@@ -173,5 +216,36 @@ codeunit 50100 "Mpesa Integration"
             end else
                 exit('');
         end;
+    end;
+
+    procedure GetTimeStamp(): Text
+    var
+        TimeTxt: Text;
+        DateTxt: Text;
+        Day: Integer;
+        Month: Integer;
+        Year: Integer;
+    begin
+        TimeTxt := Format(Time);
+        TimeTxt := DelChr(TimeTxt, '=', ':');
+        TimeTxt := DelChr(TimeTxt, '=', ' ');
+        TimeTxt := DelChr(TimeTxt, '=', 'PM');
+        TimeTxt := DelChr(TimeTxt, '=', 'AM');
+        Message(TimeTxt);
+        Day := Date2DWY(Today, 1);
+        Month := Date2DWY(Today, 2);
+        Year := Date2DWY(Today, 3);
+        DateTxt := Format(Year) + AppendZeroOnValue(Month) + AppendZeroOnValue(Day) + '00';
+    end;
+
+    local procedure AppendZeroOnValue(Value: Integer): Text
+    var
+        ValueTxt: Text;
+    begin
+        ValueTxt := Format(Value);
+        if StrLen(ValueTxt) <> 2 then begin
+            ValueTxt := '0' + ValueTxt;
+        end;
+        exit(ValueTxt);
     end;
 }

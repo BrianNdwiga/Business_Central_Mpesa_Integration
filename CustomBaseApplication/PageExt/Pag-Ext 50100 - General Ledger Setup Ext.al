@@ -6,6 +6,11 @@ pageextension 50101 "General Ledger Setup Ext" extends "General Ledger Setup"
         {
             group("Mpesa Integration Setup")
             {
+                field("API Integration Type"; Rec."API Integration Type")
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Specifies the value of the API Integration Type field.';
+                }
                 field("Short Code"; Rec."Short Code")
                 {
                     ApplicationArea = All;
@@ -20,6 +25,11 @@ pageextension 50101 "General Ledger Setup Ext" extends "General Ledger Setup"
                 {
                     ApplicationArea = All;
                     ToolTip = 'Specifies the value of the Consumer Secret field.';
+                }
+                field("CallBack URL"; Rec."CallBack URL")
+                {
+                    ApplicationArea = All;
+                    ToolTip = 'Specifies the value of the CallBack URL field.';
                 }
             }
         }
